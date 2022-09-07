@@ -219,17 +219,19 @@ def quick_classifiers_test(x, y, models_list=None, random_state=None, max_iter=1
             probas = clf.decision_function(x)
 
         # Compute scores
+        start_time = timeit.default_timer()
         accuracy = accuracy_score(y, predictions)
         f1 = f1_score(y, predictions)
         precision = precision_score(y, predictions)
         recall = recall_score(y, predictions)
         roc_auc = roc_auc_score(y, probas)
-        cross_entropy = log_loss(y, predictions)          
+        cross_entropy = log_loss(y, predictions)
+        compute_score_time = timeit.default_timer() - start_time
 
         # Store in df
-        results_df[model] = [accuracy, f1, precision, recall, roc_auc, cross_entropy, fit_time, predict_time]
+        results_df[model] = [accuracy, f1, precision, recall, roc_auc, cross_entropy, fit_time, predict_time, compute_score_time]
     
-    results_df.index = ['accuracy', 'f1', 'precision', 'recall', 'roc_auc', 'cross_entropy', 'fit_time', 'predict_time']
+    results_df.index = ['accuracy', 'f1', 'precision', 'recall', 'roc_auc', 'cross_entropy', 'fit_time', 'predict_time', 'compute_score_time']
     return results_df
 
 def run_GridSearchCV(model, x, y, folds, param_grid, optimized_metric):
