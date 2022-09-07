@@ -73,7 +73,7 @@ def create_folds(x, y, num_folds, stratified=False, random_state=1):
 
 # ----------------------------------------------- Modeling functions --------------------------------------------
 
-def test_dummy_classifiers(x, y, strategies_list=None, random_state=None, constant=None):
+def test_dummy_classifiers(x, y, valid_size=0.2, strategies_list=None, random_state=None, constant=None):
     """
     Function which test dummy classifier approaches and return results on some standard metrics.
     
@@ -81,6 +81,7 @@ def test_dummy_classifiers(x, y, strategies_list=None, random_state=None, consta
     ----------
     - x : matrix of inputs (array-like)
     - y : vector of labels (array-like)
+    - valid_size : proportion of dataset used as validation set (float)
     - strategies_list : dummy strategies to test (list or None)
     
     Possible values : ['most_frequent', 'prior', 'stratified', 'uniform', 'constant']
@@ -94,6 +95,9 @@ def test_dummy_classifiers(x, y, strategies_list=None, random_state=None, consta
     if not strategies_list:
         strategies_list = ['most_frequent', 'prior', 'stratified', 'uniform', 'constant']
 
+    # Creating train and valid set
+    x_train, x_valid, y_train, y_valid = train_test_split(x, y, test_size=valid_size, random_state=random_state)
+        
     # Creating a df to store results on tested models
     results_df = pd.DataFrame()
     
@@ -104,23 +108,23 @@ def test_dummy_classifiers(x, y, strategies_list=None, random_state=None, consta
           
         # Train dummy and compute time
         start_time = timeit.default_timer()
-        clf.fit(x, y)
+        clf.fit(x_train, y_train)
         fit_time = timeit.default_timer() - start_time
 
         # Make predictions and compute time
         start_time = timeit.default_timer()
-        predictions = clf.predict(x)
+        predictions = clf.predict(x_valid)
         predict_time = timeit.default_timer() - start_time
 
-        probas = clf.predict_proba(x)[:,1]
+        probas = clf.predict_proba(x_valid)[:,1]
 
         # Compute scores
-        accuracy = accuracy_score(y, predictions)
-        f1 = f1_score(y, predictions)
-        precision = precision_score(y, predictions)
-        recall = recall_score(y, predictions)
-        roc_auc = roc_auc_score(y, probas)
-        cross_entropy = log_loss(y, predictions)
+        accuracy = accuracy_score(y_valid, predictions)
+        f1 = f1_score(y_valid, predictions)
+        precision = precision_score(y_valid, predictions, zero_division=0)
+        recall = recall_score(y_valid, predictions)
+        roc_auc = roc_auc_score(y_valid, probas)
+        cross_entropy = log_loss(y_valid, predictions)
         
         # Store in df
         results_df[strategy] = [accuracy, f1, precision, recall, roc_auc, cross_entropy, fit_time, predict_time]
@@ -128,15 +132,17 @@ def test_dummy_classifiers(x, y, strategies_list=None, random_state=None, consta
     results_df.index = ['accuracy', 'f1', 'precision', 'recall', 'roc_auc', 'cross_entropy', 'fit_time', 'predict_time']
     return results_df
 
-def quick_classifiers_test(x, y, models_list=None, random_state=None, max_iter=100, n_jobs=None):
+def quick_classifiers_test(x, y, valid_size=0.2, models_list=None, random_state=None, max_iter=100, n_jobs=None):
     """
     Function which test a bunch of sklearn classification models 
-    without hyperparameters optimization or cross-validation and return results on some standard metrics.
+    without hyperparameters optimization and return results on some standard metrics on a validation set.
+    
     
     Parameters
     ----------
     - x : matrix of inputs (array-like)
     - y : vector of labels (array-like)
+    - valid_size : proportion of dataset used as validation set (float)
     - models_list : models to test (list or None)
     
     Possible values : ['GradientBoostingClassifier', 'RandomForestClassifier', 'KNeighborsClassifier', 
@@ -196,6 +202,9 @@ def quick_classifiers_test(x, y, models_list=None, random_state=None, max_iter=1
         'DecisionTreeClassifier'
     ]
     
+    # Creating train and valid set
+    x_train, x_valid, y_train, y_valid = train_test_split(x, y, test_size=valid_size, random_state=random_state)
+    
     # Creating a df to store results on tested models
     results_df = pd.DataFrame()
     
@@ -204,28 +213,28 @@ def quick_classifiers_test(x, y, models_list=None, random_state=None, max_iter=1
             
         # Train model and compute time
         start_time = timeit.default_timer()
-        clf.fit(x, y)
+        clf.fit(x_train, y_train)
         fit_time = timeit.default_timer() - start_time
 
         # Make predictions and compute time
         start_time = timeit.default_timer()
-        predictions = clf.predict(x)
+        predictions = clf.predict(x_valid)
         predict_time = timeit.default_timer() - start_time
 
         # Predict probas depending on model
         if model in models_probas:
-            probas = clf.predict_proba(x)[:,1]
+            probas = clf.predict_proba(x_valid)[:,1]
         else:
-            probas = clf.decision_function(x)
+            probas = clf.decision_function(x_valid)
 
         # Compute scores
         start_time = timeit.default_timer()
-        accuracy = accuracy_score(y, predictions)
-        f1 = f1_score(y, predictions)
-        precision = precision_score(y, predictions)
-        recall = recall_score(y, predictions)
-        roc_auc = roc_auc_score(y, probas)
-        cross_entropy = log_loss(y, predictions)
+        accuracy = accuracy_score(y_valid, predictions)
+        f1 = f1_score(y_valid, predictions)
+        precision = precision_score(y_valid, predictions)
+        recall = recall_score(y_valid, predictions)
+        roc_auc = roc_auc_score(y_valid, probas)
+        cross_entropy = log_loss(y_valid, predictions)
         compute_score_time = timeit.default_timer() - start_time
 
         # Store in df
