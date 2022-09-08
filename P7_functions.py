@@ -8,6 +8,7 @@ import timeit
 
 # Preprocessing
 from sklearn.model_selection import KFold, StratifiedKFold
+import imblearn
 
 # Sklearn models
 from sklearn.ensemble import GradientBoostingClassifier
@@ -73,7 +74,7 @@ def create_folds(x, y, num_folds, stratified=False, random_state=1):
 
 # ----------------------------------------------- Modeling functions --------------------------------------------
 
-def test_dummy_classifiers(x, y, valid_size=0.2, strategies_list=None, random_state=None, constant=None):
+def test_dummy_classifiers(x, y, valid_size=0.2, strategies_list=None, random_state=None, constant=None, balance_class=False):
     """
     Function which test dummy classifier approaches and return results on some standard metrics.
     
@@ -90,6 +91,7 @@ def test_dummy_classifiers(x, y, valid_size=0.2, strategies_list=None, random_st
     
     - random_state : RandomState instance (int)
     - constant : The explicit constant as predicted by the "constant" strategy (int or str or array-like)
+    - balance_class : Decide wheter dataset is over-sampled with SMOTE and under-sampled randomly to balance classes (bool)
     """
     
     if not strategies_list:
@@ -98,6 +100,14 @@ def test_dummy_classifiers(x, y, valid_size=0.2, strategies_list=None, random_st
     # Creating train and valid set
     x_train, x_valid, y_train, y_valid = train_test_split(x, y, test_size=valid_size, random_state=random_state)
         
+    # Balance classes
+    if balance_class:
+        over = imblearn.over_sampling.SMOTE(sampling_strategy=0.1)
+        under = imblearn.under_sampling.RandomUnderSampler(sampling_strategy=0.5)
+        steps = [('o', over), ('u', under)]
+        class_balance = imblearn.pipeline.Pipeline(steps=steps)
+        x_train, y_train = class_balance.fit_resample(x_train, y_train)
+    
     # Creating a df to store results on tested models
     results_df = pd.DataFrame()
     
@@ -132,7 +142,7 @@ def test_dummy_classifiers(x, y, valid_size=0.2, strategies_list=None, random_st
     results_df.index = ['accuracy', 'f1', 'precision', 'recall', 'roc_auc', 'cross_entropy', 'fit_time', 'predict_time']
     return results_df
 
-def quick_classifiers_test(x, y, valid_size=0.2, models_list=None, random_state=None, max_iter=100, n_jobs=None):
+def quick_classifiers_test(x, y, valid_size=0.2, models_list=None, random_state=None, max_iter=100, n_jobs=None, balance_class=False):
     """
     Function which test a bunch of sklearn classification models 
     without hyperparameters optimization and return results on some standard metrics on a validation set.
@@ -154,6 +164,7 @@ def quick_classifiers_test(x, y, valid_size=0.2, models_list=None, random_state=
     - random_state : RandomState instance (int)
     - max_iter : Maximum number of iterations taken for the solvers to converge (int)
     - n_jobs  : Number of CPU cores used when parallelizing over classes (int)
+    - balance_class : Decide wheter dataset is over-sampled with SMOTE and under-sampled randomly to balance classes (bool)
     """
     
     # If models_list=None, we test all models
@@ -205,6 +216,14 @@ def quick_classifiers_test(x, y, valid_size=0.2, models_list=None, random_state=
     # Creating train and valid set
     x_train, x_valid, y_train, y_valid = train_test_split(x, y, test_size=valid_size, random_state=random_state)
     
+    # Balance classes
+    if balance_class:
+        over = imblearn.over_sampling.SMOTE(sampling_strategy=0.1)
+        under = imblearn.under_sampling.RandomUnderSampler(sampling_strategy=0.5)
+        steps = [('o', over), ('u', under)]
+        class_balance = imblearn.pipeline.Pipeline(steps=steps)
+        x_train, y_train = class_balance.fit_resample(x_train, y_train)
+    
     # Creating a df to store results on tested models
     results_df = pd.DataFrame()
     
@@ -243,7 +262,7 @@ def quick_classifiers_test(x, y, valid_size=0.2, models_list=None, random_state=
     results_df.index = ['accuracy', 'f1', 'precision', 'recall', 'roc_auc', 'cross_entropy', 'fit_time', 'predict_time', 'compute_score_time']
     return results_df
 
-def run_GridSearchCV(model, x, y, folds, param_grid, optimized_metric):
+def run_GridSearchCV(model, x, y, folds, param_grid, optimized_metric, balance_class=False):
     """
     Function which optimizes hyperparameters on a cross-validation (GridSearchCV) for a given model.
     
@@ -255,11 +274,32 @@ def run_GridSearchCV(model, x, y, folds, param_grid, optimized_metric):
     - folds : cross-validation generator or an iterable
     - param_grid : hyperparameters to optimize (dictionnary)
     - optimized_metric : metric to optimize (see sklearn.metrics.SCORERS.keys() for possible values)
+    - balance_class : Decide wheter dataset is over-sampled with SMOTE and under-sampled randomly to balance classes (bool)
     """
     
+    # Balance classes
+    if balance_class:
+        over = imblearn.over_sampling.SMOTE(sampling_strategy=0.1)
+        under = imblearn.under_sampling.RandomUnderSampler(sampling_strategy=0.5)
+        
+        # We create a imblearn pipeline which will take care to balance only train set during cross validation
+        steps = [('o', over), ('u', under), ('model', model)]
+        pipe = imblearn.pipeline.Pipeline(steps=steps)
+        
+        # We have to rename the parameters accordingly to pipeline step
+        params = {}
+        for param, value in param_grid.items():
+            params['model__{}'.format(param)] = value
+        
+    else:
+        pipe = model
+        params = param_grid
+
+    
+    # Proceeding to cross-validation with parameters optmization
     clf = GridSearchCV(
-        model,
-        param_grid,
+        pipe,
+        params,
         cv=folds,
         scoring=optimized_metric,
         n_jobs=-1,
