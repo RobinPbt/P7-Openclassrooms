@@ -27,6 +27,8 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.metrics import log_loss
+from sklearn.metrics import fbeta_score
+from sklearn.metrics import make_scorer
 from sklearn.model_selection import GridSearchCV
 from sklearn.dummy import DummyClassifier
 
@@ -313,3 +315,32 @@ def run_GridSearchCV(model, x, y, folds, param_grid, optimized_metric, balance_c
     print("Best score on training set : {:.3f}".format(clf.best_score_))
     
     return clf
+
+def test_classification_thresholds(model, x, y, threshold_list = np.linspace(0.05, 0.5, num=10)):
+    """
+    Function which computes classifications metrics for a model with different prediction thresholds.
+    
+    Parameters
+    ----------
+    - model : estimator object
+    - x : matrix of inputs (pd.DataFrame, np.array)
+    - y : vector of labels (pd.Series, np.array)
+    """
+    
+    test_df = pd.DataFrame()
+    
+    probas = model.predict_proba(x)[:,1]
+    threshold_list = np.linspace(0.05, 0.5, num=10)
+
+    for i in threshold_list:
+        y_pred = (probas >= i).astype(int)
+        fbeta = fbeta_score(y, y_pred, beta=2)
+        accuracy = accuracy_score(y, y_pred)
+        precision = precision_score(y, y_pred)
+        recall = recall_score(y, y_pred)
+        
+        scores = [fbeta, accuracy, precision, recall]
+        test_df[i] = scores
+        
+    test_df.index = ['fbeta', 'accuracy', 'precision', 'recall']
+    return test_df
