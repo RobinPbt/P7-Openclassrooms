@@ -316,7 +316,7 @@ def run_GridSearchCV(model, x, y, folds, param_grid, optimized_metric, balance_c
     
     return clf
 
-def test_classification_thresholds(model, x, y, threshold_list = np.linspace(0.05, 0.5, num=10)):
+def test_classification_thresholds(model, x, y, threshold_list = np.linspace(0.05, 0.95, num=19)):
     """
     Function which computes classifications metrics for a model with different prediction thresholds.
     
@@ -325,12 +325,12 @@ def test_classification_thresholds(model, x, y, threshold_list = np.linspace(0.0
     - model : estimator object
     - x : matrix of inputs (pd.DataFrame, np.array)
     - y : vector of labels (pd.Series, np.array)
+    - threshold_list : list of thresholds to test (list of floats)
     """
     
     test_df = pd.DataFrame()
     
     probas = model.predict_proba(x)[:,1]
-    threshold_list = np.linspace(0.05, 0.5, num=10)
 
     for i in threshold_list:
         y_pred = (probas >= i).astype(int)
