@@ -5,9 +5,17 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import time
 import timeit
+import pickle
 
 # Preprocessing
+from sklearn.model_selection import train_test_split
+from sklearn import manifold, decomposition
 from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
+from sklearn.preprocessing import StandardScaler
 import imblearn
 
 # Sklearn models
@@ -27,10 +35,14 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.metrics import log_loss
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import fbeta_score
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import reciprocal
 from sklearn.dummy import DummyClassifier
+
 
 # ----------------------------------------------- Preprocessing functions --------------------------------------------
 
@@ -344,3 +356,129 @@ def test_classification_thresholds(model, x, y, threshold_list = np.linspace(0.0
         
     test_df.index = ['fbeta', 'accuracy', 'precision', 'recall']
     return test_df
+
+# ----------------------------------------------- Final preprocessing functions --------------------------------------------
+
+def final_cleaning(data):
+    
+    # Dropping keys
+    keys = data['SK_ID_CURR']
+    data.drop(['Unnamed: 0', 'SK_ID_CURR'], axis=1, inplace=True)
+
+    # Splitting inputs and labels
+    y = data['TARGET']
+    x = data.drop(['TARGET'], axis=1)
+
+    # We replace inf values by NaN
+    x.replace([np.inf, -np.inf], np.nan, inplace=True)
+    
+    return x, y, keys
+
+def final_transform(x, categorical_cols, numerical_cols):
+
+    # Preprocessing for numerical data
+    numerical_transformer = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='mean')),
+        ('stdscaler', StandardScaler())
+    ])
+
+    # Preprocessing for categorical data
+    categorical_transformer = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='most_frequent')),
+        ('onehot', OneHotEncoder(handle_unknown='ignore'))
+    ])
+
+    # Bundle preprocessing for numerical and categorical data
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', numerical_transformer, numerical_cols),
+            ('cat', categorical_transformer, categorical_cols)
+        ])
+
+    # Preprocess datas
+    x = preprocessor.fit_transform(x)
+    
+    return x
+
+def final_balance(x, y):
+    # Balance datas
+    over = imblearn.over_sampling.SMOTE(sampling_strategy=0.1)
+    under = imblearn.under_sampling.RandomUnderSampler(sampling_strategy=0.5)
+    x, y = over.fit_resample(x, y)
+    x, y = under.fit_resample(x, y)
+    
+    return x, y
+
+def get_column_names(x, categorical_cols):
+    
+    # Apply one-hot encoder to each column with categorical data
+    mode_impute = SimpleImputer(strategy='most_frequent')
+    OH_encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
+    transformed = mode_impute.fit_transform(x[categorical_cols])
+    transformed = OH_encoder.fit_transform(transformed)
+    transformed_df = pd.DataFrame(transformed, columns=OH_encoder.get_feature_names_out(input_features=categorical_cols))
+
+    # One-hot encoding removed index; put it back
+    transformed_df.index = x.index
+
+    # Remove categorical columns (will replace with one-hot encoding)
+    num_data = x.drop(categorical_cols, axis=1)
+
+    # Add one-hot encoded columns to numerical features
+    full_cols = pd.concat([num_data, transformed_df], axis=1)
+
+    # Transforming our matrices in a df with the columns names
+    x = pd.DataFrame(x, columns=full_cols.columns)
+    
+    return full_cols
+
+def final_preprocessing():
+    """Preprocess datas for training our model"""
+    
+    # Load our dataset
+    data = pd.read_csv('./Clean_datas/clean_data_1.csv', sep=",")
+    
+    # Drop keys, split x, y and replace infinites values
+    x, y, _ = final_cleaning(data)
+    
+    # Defining numerical and categorical columns
+    categorical_cols = [col for col in x.columns if x[col].dtype == 'object']
+    numerical_cols = list(x.drop(categorical_cols, axis=1).columns)
+    
+    # Get new columns names after OH encoding
+    full_cols = get_column_names(x, categorical_cols)
+    
+    # Preprocessing with imputation, standardization and encoding
+    x = final_transform(x, categorical_cols, numerical_cols)
+    
+    # Over and undersampling to balance classes
+    x, y = final_balance(x, y)
+    
+    # Put back x in a df with column names and client idx
+    x = pd.DataFrame(x, columns=full_cols.columns)
+
+    return x, y
+
+def final_preprocessing_2():
+    """Preprocessing only real datas (no over and undersampling)"""
+    
+    # Load our dataset
+    data = pd.read_csv('./Clean_datas/clean_data_1.csv', sep=",")
+    
+    # Drop keys, split x, y and replace infinites values
+    x, y, keys = final_cleaning(data)
+    
+    # Defining numerical and categorical columns
+    categorical_cols = [col for col in x.columns if x[col].dtype == 'object']
+    numerical_cols = list(x.drop(categorical_cols, axis=1).columns)
+    
+    # Get new columns names after OH encoding
+    full_cols = get_column_names(x, categorical_cols)
+    
+    # Preprocessing with imputation, standardization and encoding
+    x = final_transform(x, categorical_cols, numerical_cols)
+    
+    # Put back x in a df with column names and client idx
+    x = pd.DataFrame(x, columns=full_cols.columns, index=keys)
+
+    return x, y
