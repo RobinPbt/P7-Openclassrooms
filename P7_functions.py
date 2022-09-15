@@ -482,3 +482,73 @@ def final_preprocessing_2():
     x = pd.DataFrame(x, columns=full_cols.columns, index=keys)
 
     return x, y
+
+# ----------------------------------------------- Description functions --------------------------------------------
+
+def find_dataframe(var:str):
+    
+    split_description = var.split('_')
+    
+    # Possibles suffixes which determines the original dataframe of the variable
+    dict_suffixes = {
+    'BUREAU' : "All client's previous credits provided by other financial institutions that were reported to Credit Bureau.",
+    'PREV' : "All previous applications for Home Credit loans of clients.", 
+    'APPROVED' : "(approved applications) All previous applications for Home Credit loans of clients.", 
+    'REFUSED' : "(refused applications) All previous applications for Home Credit loans of clients.", 
+    'CC' : "Monthly balance snapshots of previous credit cards that the applicant has with Home Credit.", 
+    'POS' : "Monthly balance snapshots of previous POS (point of sales) and cash loans that the applicant had with Home Credit.", 
+    'INSTAL' : "Repayment history for the previously disbursed credits in Home Credit related to the loans of client."
+    }
+    
+    # Get the description original df of the variable
+    if split_description[0] in dict_suffixes.keys(): # Look for the suffixe of variable
+        for key in dict_suffixes.keys():
+            if split_description[0] == key:  
+                origin_df = dict_suffixes[key]
+    else: # If no suffixe, it's the main table
+        origin_df = 'This is the main table. Static data for all applications. One row represents one loan in our data sample.'
+        
+    return origin_df
+
+def find_description(var:str):
+    
+    # Load a df with each description of variable with corresponding names
+    df_descriptions = pd.read_excel('./Datas/Description.xlsx')
+    df_descriptions.drop(['Unnamed: 0', 'Table', 'Special'], axis=1, inplace=True)
+    df_descriptions.drop_duplicates(subset='Row', inplace=True)
+    
+    global desc
+    
+    # Looking for the description of the variable in df
+    for i in range(len(df_descriptions)):
+        row = df_descriptions.iloc[i]
+        if row['Row'] in var:
+            desc = row['Description']
+    
+    return desc
+
+def display_descriptions(shap_values, full_cols, descriptions_df, nb_feat):
+
+    shap_df = pd.DataFrame(abs(shap_values), columns=full_cols.columns)
+    top_features = shap_df.mean(axis=0).sort_values(ascending=False)[:nb_feat].index
+    selected_df = descriptions_df[descriptions_df['Variable'].isin(top_features)]
+    
+    for feat in top_features:
+        row = selected_df[selected_df['Variable'] == feat]
+        print("Variable : {}".format(row['Variable'].values[0]))
+        print("DataFrame : {}".format(row['Var_Dataframe'].values[0]))
+        print("Description : {}".format(row['Var_Description'].values[0]))
+        print("-----------------------------------------------------------------")
+        
+def display_descriptions_2(shap_values, full_cols, descriptions_df, nb_feat):
+
+    shap_df = pd.Series(abs(shap_values), index=full_cols.columns)
+    top_features = shap_df.sort_values(ascending=False)[:nb_feat].index
+    selected_df = descriptions_df[descriptions_df['Variable'].isin(top_features)]
+    
+    for feat in top_features:
+        row = selected_df[selected_df['Variable'] == feat]
+        print("Variable : {}".format(row['Variable'].values[0]))
+        print("DataFrame : {}".format(row['Var_Dataframe'].values[0]))
+        print("Description : {}".format(row['Var_Description'].values[0]))
+        print("-----------------------------------------------------------------")
