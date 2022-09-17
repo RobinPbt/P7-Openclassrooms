@@ -363,7 +363,10 @@ def final_cleaning(data):
     
     # Dropping keys
     keys = data['SK_ID_CURR']
-    data.drop(['Unnamed: 0', 'SK_ID_CURR'], axis=1, inplace=True)
+    if 'Unnamed: 0' in data.columns:
+        data.drop(['Unnamed: 0', 'SK_ID_CURR'], axis=1, inplace=True)
+    else:
+        data.drop(['SK_ID_CURR'], axis=1, inplace=True)
 
     # Splitting inputs and labels
     y = data['TARGET']
@@ -374,7 +377,7 @@ def final_cleaning(data):
     
     return x, y, keys
 
-def final_transform(x, categorical_cols, numerical_cols):
+def final_transform(x, categorical_cols, numerical_cols, existing_preprocessor=None):
 
     # Preprocessing for numerical data
     numerical_transformer = Pipeline(steps=[
@@ -389,16 +392,20 @@ def final_transform(x, categorical_cols, numerical_cols):
     ])
 
     # Bundle preprocessing for numerical and categorical data
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('num', numerical_transformer, numerical_cols),
-            ('cat', categorical_transformer, categorical_cols)
-        ])
+    if not existing_preprocessor: # If no trained preprocessor is passed we create a new one
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ('num', numerical_transformer, numerical_cols),
+                ('cat', categorical_transformer, categorical_cols)
+            ])
 
-    # Preprocess datas
-    x = preprocessor.fit_transform(x)
+        # Preprocess datas
+        x = preprocessor.fit_transform(x)
+    else: # Else we use the existing trained preprocessor to transform datas
+        preprocessor = existing_preprocessor
+        x = preprocessor.transform(x)
     
-    return x
+    return x, preprocessor
 
 def final_balance(x, y):
     # Balance datas
@@ -432,38 +439,8 @@ def get_column_names(x, categorical_cols):
     
     return full_cols
 
-def final_preprocessing():
+def final_preprocessing(data, is_balance=True, existing_preprocessor=None, is_existing_cols=False, full_cols=None):
     """Preprocess datas for training our model"""
-    
-    # Load our dataset
-    data = pd.read_csv('./Clean_datas/clean_data_1.csv', sep=",")
-    
-    # Drop keys, split x, y and replace infinites values
-    x, y, _ = final_cleaning(data)
-    
-    # Defining numerical and categorical columns
-    categorical_cols = [col for col in x.columns if x[col].dtype == 'object']
-    numerical_cols = list(x.drop(categorical_cols, axis=1).columns)
-    
-    # Get new columns names after OH encoding
-    full_cols = get_column_names(x, categorical_cols)
-    
-    # Preprocessing with imputation, standardization and encoding
-    x = final_transform(x, categorical_cols, numerical_cols)
-    
-    # Over and undersampling to balance classes
-    x, y = final_balance(x, y)
-    
-    # Put back x in a df with column names and client idx
-    x = pd.DataFrame(x, columns=full_cols.columns)
-
-    return x, y
-
-def final_preprocessing_2():
-    """Preprocessing only real datas (no over and undersampling)"""
-    
-    # Load our dataset
-    data = pd.read_csv('./Clean_datas/clean_data_1.csv', sep=",")
     
     # Drop keys, split x, y and replace infinites values
     x, y, keys = final_cleaning(data)
@@ -472,16 +449,22 @@ def final_preprocessing_2():
     categorical_cols = [col for col in x.columns if x[col].dtype == 'object']
     numerical_cols = list(x.drop(categorical_cols, axis=1).columns)
     
-    # Get new columns names after OH encoding
-    full_cols = get_column_names(x, categorical_cols)
+    if not is_existing_cols:
+
+        # Get new columns names after OH encoding
+        full_cols = get_column_names(x, categorical_cols)
     
     # Preprocessing with imputation, standardization and encoding
-    x = final_transform(x, categorical_cols, numerical_cols)
+    x, preprocessor = final_transform(x, categorical_cols, numerical_cols, existing_preprocessor=existing_preprocessor)
+    
+    # Over and undersampling to balance classes
+    if is_balance:
+        x, y = final_balance(x, y)
     
     # Put back x in a df with column names and client idx
     x = pd.DataFrame(x, columns=full_cols.columns, index=keys)
 
-    return x, y
+    return x, y, preprocessor
 
 # ----------------------------------------------- Description functions --------------------------------------------
 
