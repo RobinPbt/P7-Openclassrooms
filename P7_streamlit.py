@@ -12,6 +12,7 @@ import shap
 from P7_functions import final_preprocessing
 from P7_functions_streamlit import *
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
 from PIL import Image
 
 # -----------------------------Define caching functions ---------------------------------
@@ -64,9 +65,13 @@ x, y, preprocessor, imputer = get_datas()
 choose_option = st.sidebar.selectbox('Data for prediction', ['Existing customer', 'Upload datas'])
 
 if choose_option == 'Existing customer':
-    customer_list = list(x.index)
+    
+    # To speed up algorithm and reduce RAM we will work on a subset
+    x_subset, _ , y_subset, _ = train_test_split(x, y, train_size = 0.5)
+    
+    customer_list = list(x_subset.index)
     customer = st.sidebar.selectbox('Customer selection', customer_list)
-    selected_customer = x.loc[customer]
+    selected_customer = x_subset.loc[customer]
 
 else:
     
@@ -194,33 +199,9 @@ with prediction_container:
     proba_col.plotly_chart(fig)
 
 # Explain features determining prediction
-explainer = shap.LinearExplainer(load_clf, x)
+explainer = shap.LinearExplainer(load_clf, x_subset)
 
 with explanation:
-    st.header("Global features importance (training dataset)")
-    shap_values = explainer.shap_values(x)
-    fig = plt.figure()
-    plot = shap.summary_plot(shap_values, x, plot_type="bar", color="dodgerblue")
-    st.pyplot(fig)
-    
-    # Display descriptions of features in chart
-    descriptions_df = load_descriptions()
-    
-    is_description_global = st.checkbox('Display description of variables', key='global')
-
-    if is_description_global:
-    
-        shap_df = pd.DataFrame(abs(shap_values), columns=x.columns)
-        top_features = shap_df.mean(axis=0).sort_values(ascending=False)[:20].index
-        selected_df = descriptions_df[descriptions_df['Variable'].isin(top_features)]
-
-        for feat in top_features:
-            row = selected_df[selected_df['Variable'] == feat]
-            st.write("Variable : {}".format(row['Variable'].values[0]))
-            st.write("DataFrame : {}".format(row['Var_Dataframe'].values[0]))
-            st.write("Description : {}".format(row['Var_Description'].values[0]))
-            st.write("-----------------------------------------------------------------")
-    
     
     st.header("Local features importance")
     shap_values = explainer.shap_values(selected_customer)
@@ -244,15 +225,48 @@ with explanation:
             st.write("DataFrame : {}".format(row['Var_Dataframe'].values[0]))
             st.write("Description : {}".format(row['Var_Description'].values[0]))
             st.write("-----------------------------------------------------------------")
+    
+    
+    
+    
+    st.header("Global features importance (training dataset)")
+    shap_values = explainer.shap_values(x_subset)
+    
+    # To speed up algorithm and reduce RAM we will work on a subset
+    
+    fig = plt.figure()
+    plot = shap.summary_plot(shap_values, x_subset, plot_type="bar", color="dodgerblue")
+    st.pyplot(fig)
+    
+    # Display descriptions of features in chart
+    descriptions_df = load_descriptions()
+    
+    is_description_global = st.checkbox('Display description of variables', key='global')
+
+    if is_description_global:
+    
+        shap_df = pd.DataFrame(abs(shap_values), columns=x_subset.columns)
+        top_features = shap_df.mean(axis=0).sort_values(ascending=False)[:20].index
+        selected_df = descriptions_df[descriptions_df['Variable'].isin(top_features)]
+
+        for feat in top_features:
+            row = selected_df[selected_df['Variable'] == feat]
+            st.write("Variable : {}".format(row['Variable'].values[0]))
+            st.write("DataFrame : {}".format(row['Var_Dataframe'].values[0]))
+            st.write("Description : {}".format(row['Var_Description'].values[0]))
+            st.write("-----------------------------------------------------------------")
+    
+    
+
             
 with visualization:
     # Get back list of local and global top features
-    shap_values = explainer.shap_values(x)
-    shap_df = pd.DataFrame(abs(shap_values), columns=x.columns)
+    shap_values = explainer.shap_values(x_subset)
+    shap_df = pd.DataFrame(abs(shap_values), columns=x_subset.columns)
     top_global_features = shap_df.mean(axis=0).sort_values(ascending=False)[:20].index
     
     shap_values = explainer.shap_values(selected_customer)
-    shap_df = pd.Series(abs(shap_values), index=x.columns)
+    shap_df = pd.Series(abs(shap_values), index=x_subset.columns)
     top_local_features = shap_df.sort_values(ascending=False)[:10].index
     
     features_diff = list(set(top_local_features) - set(top_global_features))
@@ -267,18 +281,18 @@ with visualization:
     feat_1 = feat_1_col.selectbox('Feature 1', top_global_features)
     feat_1_col.write("Distribution of {}".format(feat_1))
     plt.figure()
-    sns.displot(x=x[feat_1], hue=y['TARGET'], kind="kde", palette=['g', 'r'])
+    sns.displot(x=x_subset[feat_1], hue=y_subset['TARGET'], kind="kde", palette=['g', 'r'])
     feat_1_col.pyplot(plt.gcf())
     
     
     feat_2 = feat_2_col.selectbox('Feature 2', top_global_features)
     feat_2_col.write("Distribution of {}".format(feat_2))
     plt.figure()
-    sns.displot(x=x[feat_2], hue=y['TARGET'], kind="kde", palette=['g', 'r'])
+    sns.displot(x=x_subset[feat_2], hue=y_subset['TARGET'], kind="kde", palette=['g', 'r'])
     feat_2_col.pyplot(plt.gcf())
     
     st.write("Correlation between 2 selected features")
     plt.figure()
-    sns.scatterplot(x=x[feat_1], y=x[feat_2], hue=y['TARGET'], palette=['g', 'r'])
+    sns.scatterplot(x=x_subset[feat_1], y=x_subset[feat_2], hue=y_subset['TARGET'], palette=['g', 'r'])
     st.pyplot(plt.gcf())
     
